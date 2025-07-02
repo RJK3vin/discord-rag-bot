@@ -3,5 +3,6 @@ uvicorn
 httpx
 pydantic
 python-dotenv
+pymongo
 azure-core
 azure-ai-inference

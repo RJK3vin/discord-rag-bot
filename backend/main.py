@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from azure.ai.inference import ChatCompletionsClient
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.inference.models import SystemMessage, UserMessage
+from database import feedback_collection 
 
 # Load env
 load_dotenv()
@@ -27,6 +28,13 @@ app = FastAPI()
 class QueryRequest(BaseModel):
     user_id: str
     question: str
+
+class Feedback(BaseModel):
+    question: str
+    response: str
+    rating: str  # thumbs_up or thumbs_down
+    comment: str = ""
+    timestamp: str
 
 @app.post("/query")
 async def query(data: QueryRequest):
@@ -54,3 +62,9 @@ async def query(data: QueryRequest):
             "answer": "⚠️ DeepSeek call failed.",
             "thinking": None
         }
+
+@app.post("/feedback")
+async def store_feedback(feedback: Feedback):
+    feedback_dict = feedback.model_dump()
+    feedback_collection.insert_one(feedback_dict)
+    return {"message": "Feedback saved."}
