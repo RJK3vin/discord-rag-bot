@@ -1,11 +1,16 @@
 import os
+import re
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from azure.ai.inference import ChatCompletionsClient
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.inference.models import SystemMessage, UserMessage
 from database import feedback_collection 
+from zoneinfo import ZoneInfo
+from mock_rag import retrieve_context
 
 # Load env
 load_dotenv()
@@ -24,6 +29,16 @@ client = ChatCompletionsClient(
 # FastAPI app
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+ET = ZoneInfo("America/New_York")
+
 # Input schema
 class QueryRequest(BaseModel):
     user_id: str
@@ -38,9 +53,11 @@ class Feedback(BaseModel):
 
 @app.post("/query")
 async def query(data: QueryRequest):
+    context = retrieve_context(data.question)
+
     messages = [
-        SystemMessage(content="You are a helpful assistant. Wrap internal thoughts with <think>...</think>."),
-        UserMessage(content=data.question)
+        SystemMessage(content="You are a helpful assistant. Be concise and clear."),
+        UserMessage(content=f"Context: {context}\n\nQuestion: {data.question}")
     ]
 
     try:
@@ -52,9 +69,10 @@ async def query(data: QueryRequest):
         )
 
         answer = response.choices[0].message.content
+        cleaned_answer = re.sub(r"<think>.*?</think>", "", answer, flags=re.DOTALL).strip()
         return {
-            "answer": answer,
-            "thinking": None  # Can add parsing later
+            "answer": cleaned_answer,
+            "thinking": None 
         }
     except Exception as e:
         print("DeepSeek error:", e)
@@ -65,6 +83,14 @@ async def query(data: QueryRequest):
 
 @app.post("/feedback")
 async def store_feedback(feedback: Feedback):
-    feedback_dict = feedback.model_dump()
-    feedback_collection.insert_one(feedback_dict)
-    return {"message": "Feedback saved."}
+    data = feedback.model_dump()
+    if not data.get("timestamp"):
+        data["timestamp"] = datetime.now(ET).isoformat()
+    print("[FEEDBACK RECEIVED]", data)
+    try:
+        result = feedback_collection.insert_one(data)
+        print("[INSERT SUCCESS]", result.inserted_id)
+        return {"status": "success", "inserted_id": str(result.inserted_id), "timestamp": data["timestamp"]}
+    except Exception as e:
+        print("[INSERT ERROR]", e)
+        return {"status": "error", "message": str(e)}
