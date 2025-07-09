@@ -23,13 +23,23 @@ client.on("messageCreate", async (message) => {
     
     if (message.content.startsWith("/ask")) {
         const question = message.content.replace("/ask", "").trim();
-        await message.channel.sendTyping();
+        await message.channel.sendTyping()
+
+        let typing = true
+        const typingInterval = setInterval(() => {
+            if (typing) {
+                message.channel.sendTyping().catch(console.error)
+            }
+        }, 5000)
         
         try {
             const res = await axios.post("http://localhost:8000/query", {
                 user_id: message.author.id,
                 question: question,
             });
+
+            typing = false
+            clearInterval(typingInterval)
             
             let answer = res.data.answer.trim()
 
@@ -51,6 +61,8 @@ client.on("messageCreate", async (message) => {
                 submissionTimer: null
             });
         } catch (err) {
+            typing = false
+            clearInterval(typingInterval)
             console.error(err);
             await message.reply("⚠️ Sorry, there was an error processing your request.");
         }
