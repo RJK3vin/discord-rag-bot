@@ -31,7 +31,13 @@ client.on("messageCreate", async (message) => {
                 question: question,
             });
             
-            const reply = await message.reply(`📘 **Answer:** ${res.data.answer}`);
+            let answer = res.data.answer.trim()
+
+            if (answer.toLowerCase().startsWith("answer:")) {
+                answer = answer.slice(7).trim()
+            }
+
+            const reply = await message.reply(`📘 **Answer:** ${answer}`);
             await reply.react("👍");
             await reply.react("👎");
             

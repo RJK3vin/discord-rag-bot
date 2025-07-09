@@ -10,7 +10,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.ai.inference.models import SystemMessage, UserMessage
 from database import feedback_collection 
 from zoneinfo import ZoneInfo
-from mock_rag import retrieve_context
+from mock_rag import retrieve_context_with_keywords
 
 # Load env
 load_dotenv()
@@ -53,7 +53,7 @@ class Feedback(BaseModel):
 
 @app.post("/query")
 async def query(data: QueryRequest):
-    context = retrieve_context(data.question)
+    context = retrieve_context_with_keywords(data.question)
 
     messages = [
         SystemMessage(content="You are a helpful assistant. Be concise and clear."),
