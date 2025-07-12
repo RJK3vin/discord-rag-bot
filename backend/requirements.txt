@@ -6,3 +6,4 @@ python-dotenv
 pymongo
 azure-core
 azure-ai-inference
+certifi

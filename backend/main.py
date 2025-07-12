@@ -11,6 +11,18 @@ from azure.ai.inference.models import SystemMessage, UserMessage
 from database import feedback_collection 
 from zoneinfo import ZoneInfo
 from mock_rag import retrieve_context_with_keywords
+import logging
+from collections import defaultdict
+import time
+
+metrics = defaultdict(int)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+logger = logging.getLogger(__name__)
 
 # Load env
 load_dotenv()
@@ -59,7 +71,8 @@ async def query(data: QueryRequest):
         SystemMessage(content="You are a helpful assistant. Be concise and clear."),
         UserMessage(content=f"Context: {context}\n\nQuestion: {data.question}")
     ]
-
+    start = time.time()
+    metrics["query_count"] += 1
     try:
         response = client.complete(
             stream=False,
@@ -70,27 +83,33 @@ async def query(data: QueryRequest):
 
         answer = response.choices[0].message.content
         cleaned_answer = re.sub(r"<think>.*?</think>", "", answer, flags=re.DOTALL).strip()
+        metrics["query_success"] += 1
         return {
             "answer": cleaned_answer,
             "thinking": None 
         }
     except Exception as e:
-        print("DeepSeek error:", e)
+        metrics["query_errors"] += 1
+        logger.error(f"DeepSeek error: {e}")
         return {
             "answer": "⚠️ DeepSeek call failed.",
             "thinking": None
         }
+    finally:
+        duration = time.time() - start
+        logger.info(f"[METRIC] query_time={duration:.2f}s")
+
 
 @app.post("/feedback")
 async def store_feedback(feedback: Feedback):
     data = feedback.model_dump()
     if not data.get("timestamp"):
         data["timestamp"] = datetime.now(ET).isoformat()
-    print("[FEEDBACK RECEIVED]", data)
+    logger.info(f"[FEEDBACK RECEIVED] {data}")
     try:
         result = feedback_collection.insert_one(data)
         print("[INSERT SUCCESS]", result.inserted_id)
         return {"status": "success", "inserted_id": str(result.inserted_id), "timestamp": data["timestamp"]}
     except Exception as e:
-        print("[INSERT ERROR]", e)
+        logger.error(f"[INSERT ERROR] {e}")
         return {"status": "error", "message": str(e)}
